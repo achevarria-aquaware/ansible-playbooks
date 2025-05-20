@@ -1,0 +1,54 @@
+---
+- name: Deployment pipeline on OpenShift Container Platform
+  hosts: windows
+  tasks:
+    - name: 🧹 Limpiar ambiente (si existe la carpeta, eliminar carpeta de forma segura)
+      win_shell: |
+        if (Test-Path "C:\\proof-of-concept") {
+          Remove-Item -Path "C:\\proof-of-concept" -Recurse -Force
+        }
+
+    - name: 📁 Verificar que el directorio temporal exista
+      win_file:
+        path: C:\Temp
+        state: directory
+
+    - name: 🧪 Verificar instalación de Git
+      win_command: git --version
+      register: git_check
+      ignore_errors: true
+
+    - name: 🛠️ Instalar Git si no está presente
+      win_shell: |
+        Invoke-WebRequest -Uri "https://github.com/git-for-windows/git/releases/download/v2.42.0.windows.1/Git-2.42.0-64-bit.exe" -OutFile "C:\\Temp\\Git-Installer.exe"
+        Start-Process -FilePath "C:\\Temp\\Git-Installer.exe" -ArgumentList "/VERYSILENT", "/NORESTART" -Wait
+        Remove-Item -Path "C:\\Temp\\Git-Installer.exe" -Force
+      when: git_check.rc != 0
+
+    - name: 📥 Clonar repositorio del proyecto (GitHub)
+      win_shell: |
+        git clone `
+          https://github.com/achevarria-aquaware/proof-of-concept.git `
+          "C:\\proof-of-concept"
+
+    - name: deploy a demo application
+      ansible.windows.win_powershell:
+        script: |
+          .\oc.exe apply -f C:\\proof-of-concept\app-deployment\deployment.yaml
+          .\oc.exe apply -f C:\\proof-of-concept\app-deployment\service.yaml
+          .\oc.exe apply -f C:\\proof-of-concept\app-deployment\route.yaml
+
+    - name: Get Web URL endpoint
+      ansible.windows.win_powershell:
+        script: |
+          .\oc.exe get route -o=jsonpath="{.items[0].spec.host}"
+      register: web_url_endpoint
+
+    - name: Web Request
+      ansible.windows.win_uri:
+        url: http://{{ web_url_endpoint.output[0] }}/data
+      register: web_request_output
+
+    - name: Print Web Request Output
+      ansible.builtin.debug:
+        var: web_request_output.status_code
