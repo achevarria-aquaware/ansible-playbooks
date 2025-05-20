@@ -1,6 +1,6 @@
 ---
 - name: Deployment pipeline on OpenShift Container Platform
-  hosts: windows
+  hosts: target3
   tasks:
     - name: 🧹 Limpiar ambiente (si existe la carpeta, eliminar carpeta de forma segura)
       win_shell: |
